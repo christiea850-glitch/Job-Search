@@ -1,0 +1,126 @@
+# ============================================================
+#  MY JOB FINDER - SETTINGS
+#  This is the only file you need to change.
+#  Lines that start with # are notes. The computer ignores them.
+# ============================================================
+
+# ---------- 1. ABOUT ME ----------
+# Skills I already have. Jobs that ask for these get a higher score.
+# Write them the way job posts usually write them.
+my_skills:
+  - Excel
+  - SQL
+  - Python
+  - Epic
+  - EHR
+  - scheduling
+  - cardiology
+  - healthcare
+  - data cleaning
+  - dashboards
+  - project management
+  - Agile
+  - operations
+  - machine learning
+
+# Most years of experience I can honestly claim.
+# Jobs that ask for MORE than this get a lower score.
+max_years_experience: 3
+
+# Industries I like. Jobs in these get a few extra points,
+# but jobs in ALL industries are still shown.
+# Leave empty [] for no bonus.
+bonus_industries:
+  - 'health|clinic|hospital|patient|medical'
+bonus_points: 5
+
+
+# ---------- 2. WHAT JOBS I WANT ----------
+# The website search uses these words.
+search_terms:
+  - data analyst
+  - business analyst
+  - reporting analyst
+  - business intelligence
+  - operations analyst
+  - analytics
+  - project coordinator
+
+# A job TITLE must match at least one of these to be shown.
+# (These are "regex" patterns. "|" means OR. \b means "whole word".)
+title_must_match:
+  - '\bdata\b'
+  - '\banalyst\b'
+  - '\banalytics?\b'
+  - 'business intelligence|\bBI\b'
+  - '\breporting\b'
+  - '\binformatics\b'
+  - 'decision support'
+  - 'project (coordinator|analyst)'
+
+# If the TITLE has any of these, the job is hidden (too senior or wrong field).
+title_must_not_match:
+  - '\bsenior\b|\bsr\.?\b'
+  - '\blead\b|\bprincipal\b|\bstaff\b'
+  - '\bdirector\b|\bmanager\b|\bhead of\b|\bVP\b|vice president'
+  - '\barchitect\b'
+  - '\bnurse\b|\bRN\b|\bLPN\b|physician|pharmacist|therapist'
+  - '\bactuar'
+  - 'data entry|\bengineer\b|scientist'
+
+
+# ---------- 3. WHERE ----------
+# A job is shown if its location matches one of these, OR it is remote.
+locations_ok:
+  - 'Connecticut|\bCT\b'
+  - 'Hartford|Manchester|Glastonbury|Bloomfield|New Britain|Farmington|Wethersfield|Middletown|Vernon|Enfield'
+include_remote: true
+
+
+# ---------- 4. GENUINE JOBS ONLY ----------
+# Hide posts from staffing agencies and job-reposting sites.
+blocked_companies:
+  - 'Robert Half|Insight Global|TEKsystems|Kforce|Jobot|Randstad|Adecco|Aerotek|Apex Systems'
+  - 'CyberCoders|Motion Recruitment|Actalent|Vaco|Collabera|Mindlance|Diverse Lynx'
+  - 'Staffing|Recruit|Talent Solutions|Consulting Group LLC'
+
+# Hide posts with these scam / low-quality signs in the text.
+blocked_words:
+  - 'pay (a|the) (fee|deposit)|training fee|send (a )?check|telegram|whatsapp only'
+
+# Hide jobs posted more than this many days ago.
+max_days_old: 30
+
+
+# ---------- 5. WHERE TO LOOK ----------
+# Employer career sites. You can add more.
+# How to add a Workday employer: open their careers page. If the web
+# address has "myworkdayjobs.com" in it, copy the address up to the
+# site name. Example: https://cvshealth.wd1.myworkdayjobs.com/CVS_Health_Careers
+employers:
+  - name: CVS Health / Aetna
+    type: workday
+    url: https://cvshealth.wd1.myworkdayjobs.com/CVS_Health_Careers
+
+  - name: Cigna / Evernorth
+    type: workday
+    url: https://cigna.wd5.myworkdayjobs.com/cignacareers
+
+  # More examples (remove the # at the start of each line to turn on):
+  # - name: Some company on Greenhouse
+  #   type: greenhouse
+  #   board: companyname        # from boards.greenhouse.io/companyname
+  # - name: Some company on Lever
+  #   type: lever
+  #   board: companyname        # from jobs.lever.co/companyname
+
+# Adzuna is a free job search website with an API (a data feed).
+# It covers thousands of employers in every industry, including ones whose
+# sites can't be read directly (like Hartford HealthCare).
+# It only runs if you add your free Adzuna keys to GitHub (see README).
+adzuna:
+  enabled: true
+  where: Connecticut
+  # Only keep Adzuna jobs from these employers (regex). Leave as [] to keep ALL employers.
+  # Example: only_employers: ['Cigna|Travelers|Hartford HealthCare']
+  only_employers: []

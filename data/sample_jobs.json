@@ -1,0 +1,128 @@
+[
+ {
+  "source": "CVS Health / Aetna",
+  "company": "CVS Health / Aetna",
+  "title": "Data Analyst I",
+  "location": "Hartford, CT",
+  "url": "https://example.com/cvs1",
+  "description": "About the role\nSupport clinical reporting for patient care teams.\nQualifications\n\u2022 Bachelor's degree in health information, statistics or related field\n\u2022 1-2 years of experience in healthcare data or reporting\n\u2022 Experience with SQL, Excel and Tableau. Knowledge of HIPAA.\n\u2022 Strong communication skills",
+  "days_ago": 0
+ },
+ {
+  "source": "Cigna / Evernorth",
+  "company": "Cigna / Evernorth",
+  "title": "Healthcare Data Analyst - Value Based Care",
+  "location": "Bloomfield, CT (Remote)",
+  "url": "https://example.com/cigna1",
+  "description": "Analyze claims and medical cost data.\nQualifications\n\u2022 Bachelor's degree in health information, statistics or related field\n\u2022 2+ years of experience in healthcare data or reporting\n\u2022 Experience with SQL, Python, Power BI, statistics, dashboards\n\u2022 Strong communication skills",
+  "days_ago": 2
+ },
+ {
+  "source": "Adzuna",
+  "company": "Hartford HealthCare",
+  "title": "Quality Reporting Analyst - Cardiology",
+  "location": "Hartford, Hartford County",
+  "url": "https://example.com/hhc1",
+  "description": "Hartford Hospital Heart & Vascular Institute. Build dashboards from Epic EHR data for cardiology quality programs.\nRequirements\n\u2022 3 years experience\n\u2022 Excel, Epic Clarity, SQL, data cleaning\n\u2022 Project management skills",
+  "days_ago": 5
+ },
+ {
+  "source": "Adzuna",
+  "company": "Yale New Haven Health",
+  "title": "Business Intelligence Analyst",
+  "location": "New Haven, CT",
+  "url": "https://example.com/ynhh1",
+  "description": "Hospital decision support team.\nRequirements\n\u2022 5+ years of experience in BI\n\u2022 SQL, Tableau, SAS, Snowflake, ETL",
+  "days_ago": 12
+ },
+ {
+  "source": "Cigna / Evernorth",
+  "company": "Cigna / Evernorth",
+  "title": "Senior Data Analyst",
+  "location": "Bloomfield, CT",
+  "url": "https://example.com/cigna2",
+  "description": "Senior role. 7+ years.",
+  "days_ago": 1
+ },
+ {
+  "source": "Adzuna",
+  "company": "Insight Global",
+  "title": "Data Analyst",
+  "location": "Hartford, CT",
+  "url": "https://example.com/ig",
+  "description": "Contract role via staffing agency. SQL, Excel.",
+  "days_ago": 1
+ },
+ {
+  "source": "Adzuna",
+  "company": "Hartford HealthCare",
+  "title": "Registered Nurse (RN) - Cardiology",
+  "location": "Manchester, CT",
+  "url": "https://example.com/rn",
+  "description": "Patient care",
+  "days_ago": 0
+ },
+ {
+  "source": "CVS Health / Aetna",
+  "company": "CVS Health / Aetna",
+  "title": "Reporting Analyst",
+  "location": "Scottsdale, AZ",
+  "url": "https://example.com/az",
+  "description": "On-site in Arizona. SQL, Excel.",
+  "days_ago": 3
+ },
+ {
+  "source": "Adzuna",
+  "company": "UConn Health",
+  "title": "Analytics Associate",
+  "location": "Farmington, CT",
+  "url": "https://example.com/old",
+  "description": "Clinical research analytics.\nQualifications\n\u2022 Master's degree preferred\n\u2022 Python, R, statistics, machine learning, data visualization\n\u2022 0-2 years experience",
+  "days_ago": 35
+ },
+ {
+  "source": "Adzuna",
+  "company": "Prospect ECHN",
+  "title": "Data Analyst - Revenue Cycle",
+  "location": "Manchester, CT",
+  "url": "https://example.com/scam",
+  "description": "Manchester Memorial Hospital. Patient billing and scheduling data.\nWhat you'll need\n\u2022 1+ years of experience with Excel and SQL\n\u2022 Epic experience a plus\n\u2022 Must pay a training fee before start",
+  "days_ago": 4
+ },
+ {
+  "source": "Adzuna",
+  "company": "CVS Health",
+  "title": "Data Analyst I",
+  "location": "Hartford, CT",
+  "url": "https://example.com/cvs1-adzuna",
+  "description": "dup from Adzuna",
+  "days_ago": 0
+ },
+ {
+  "source": "Adzuna",
+  "company": "Connecticut Children's",
+  "title": "Junior Data Analyst - Operations",
+  "location": "Hartford, CT",
+  "url": "https://example.com/ccmc",
+  "description": "Pediatric hospital operations team.\nWhat you bring\n\u2022 0-1 years experience; new grads welcome\n\u2022 Excel, SQL, Python, Power BI, Agile, dashboards\n\u2022 Interest in healthcare operations",
+  "days_ago": 1
+ },
+ {
+  "source": "Adzuna",
+  "company": "Travelers",
+  "title": "Business Analyst - Claims Operations",
+  "location": "Hartford, CT",
+  "url": "https://example.com/trv",
+  "days_ago": 2,
+  "description": "Insurance claims operations team.\nWhat you'll need\n\u2022 1-3 years experience\n\u2022 Excel, SQL, Agile, dashboards\n\u2022 Project management"
+ },
+ {
+  "source": "Adzuna",
+  "company": "Pratt & Whitney",
+  "title": "Data Analyst - Supply Chain",
+  "location": "East Hartford, CT",
+  "url": "https://example.com/pw",
+  "days_ago": 0,
+  "description": "Aerospace supply chain.\nQualifications\n\u2022 2+ years experience\n\u2022 Python, SQL, Power BI, data cleaning"
+ }
+]
