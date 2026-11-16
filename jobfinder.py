@@ -310,6 +310,7 @@ def dedupe(jobs):
         company = re.sub(r"\b(the|inc|llc|corp|corporation|company|co|group)\b", "", j["company"].lower())
         company = re.sub(r"[^a-z0-9]", "", company)[:8]  # "NBC Universal" = "NBCUniversal"
         key = f"{company} {title}"
+        j["id"] = key
         if key not in best or (best[key]["source"] == "Adzuna" and j["source"] != "Adzuna"):
             best[key] = j
     return list(best.values())
@@ -382,6 +383,18 @@ def score_job(job, cfg):
     return job
 
 
+def skills_summary(jobs, cfg, top=12):
+    """What % of today's jobs mention each skill? Shows what to learn next."""
+    mine = {s.lower() for s in cfg["my_skills"]}
+    all_skills = list(dict.fromkeys(COMMON_SKILLS + cfg["my_skills"]))
+    rows = []
+    for sk in all_skills:
+        n = sum(1 for j in jobs if re.search(skill_regex(sk), f"{j['title']}\n{j['description']}", re.I))
+        if n:
+            rows.append((sk, round(100 * n / len(jobs)), sk.lower() in mine))
+    return sorted(rows, key=lambda r: -r[1])[:top]
+
+
 # ------------------------------------------------------------
 # Step 3b: MAP POSITIONS so the page can search "within X miles of a ZIP / town"
 # ------------------------------------------------------------
@@ -440,6 +453,10 @@ def posted_text(d):
 
 
 def job_card(j):
+    track = ('<div class="track">'
+             '<button class="t-save" title="Save for later">☆ Save</button>'
+             '<button class="t-applied" title="Mark as applied">Applied</button>'
+             '<button class="t-hide" title="Hide this job">✕ Not interested</button></div>')
     level = "high" if j["score"] >= 70 else "mid" if j["score"] >= 50 else "low"
     chips = "".join(f'<span class="chip ok">✓ {e(s)}</span>' for s in j["matched"])
     gaps = "".join(f'<span class="chip gap">{e(s)}</span>' for s in j["gaps"])
@@ -469,7 +486,7 @@ def job_card(j):
         apply_html = f'<a class="apply" href="{e(j["url"])}" target="_blank" rel="noopener">Open job &amp; apply →</a>'
 
     return f"""
-<article class="card" data-score="{j['score']}" data-new="{int(j['is_new'])}" data-text="{search_text}"
+<article class="card" data-id="{e(j['id'])}" data-score="{j['score']}" data-new="{int(j['is_new'])}" data-text="{search_text}"
   data-loc="{e(j['location'].lower())}" data-lat="{lat}" data-lon="{lon}" data-remote="{int(bool(j.get('remote')))}"
   data-cat="{j['category']}" data-pay="{pay_val}">
   <div class="top">
@@ -485,15 +502,23 @@ def job_card(j):
   {f'<p class="label">They also ask for</p><div class="chips">{gaps}</div>' if gaps else ''}
   {f'<p class="label">Qualifications</p><p class="summary">{e(j["summary"])}</p>' if j['summary'] else ''}
   {apply_html}
+  {track}
 </article>"""
 
 
-def build_page(jobs, status, places):
+def build_page(jobs, status, places, skills=()):
     updated = datetime.now(ZoneInfo("America/New_York")).strftime("%a %b %d, %I:%M %p ET")
     new_count = sum(j["is_new"] for j in jobs)
     rows = "".join(
         f"<tr><td>{'✅' if s['ok'] else '⚠️'} {e(s['source'])}</td><td>{s['count']}</td><td>{e(s['note'])}</td></tr>"
         for s in status)
+    bars = "".join(
+        f'<div class="bar"><span class="bl">{e(n)}{" ✓" if have else ""}</span>'
+        f'<span class="bt"><span class="bf {"have" if have else "learn"}" style="width:{pct}%"></span></span>'
+        f'<span class="bp">{pct}%</span></div>' for n, pct, have in skills)
+    skills_html = (f'<details class="skills" open><summary>Skills employers want (in today\'s {len(jobs)} jobs)</summary>'
+                   f'{bars}<p class="note">Green ✓ = you have it. Orange = worth learning. Adzuna only shows part '
+                   f'of each job post, so real numbers are probably higher.</p></details>') if skills else ""
     cards = "".join(job_card(j) for j in jobs) or '<p class="empty">No matching jobs today. Check back tomorrow.</p>'
     css = """
 :root{--bg:#f6f7f9;--card:#fff;--ink:#1b1f24;--muted:#5f6b7a;--line:#e3e7ec;--accent:#0b6e4f;
@@ -529,6 +554,15 @@ color:var(--ink);font-size:14px}.chk{display:flex;align-items:center;gap:6px}
 .go{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;padding:9px 18px}
 .chipsrow{margin-top:8px}.sep{width:8px}.msg{margin:6px 0 0;font-size:13px;color:var(--mid)}
 .remote{color:var(--accent);font-weight:600}
+.track{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.track button{font-size:13px;padding:6px 10px}
+.track .on-save{background:#fff3c4;border-color:#e0b100;color:#5c4700}
+.track .on-applied{background:var(--accent);border-color:var(--accent);color:#fff}
+.card.is-applied{border-left:5px solid var(--accent)}.card.is-hidden{opacity:.5}
+.skills{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:0 0 14px;color:var(--ink)}
+.skills summary{font-weight:600;cursor:pointer}.bar{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:14px}
+.bl{flex:0 0 130px}.bt{flex:1;height:12px;background:var(--line);border-radius:6px;overflow:hidden}
+.bf{display:block;height:100%;border-radius:6px}.bf.have{background:var(--hi)}.bf.learn{background:var(--mid)}
+.bp{flex:0 0 40px;text-align:right;color:var(--muted)}.note{font-size:12.5px;color:var(--muted);margin:8px 0 0}
 .btns{display:flex;gap:8px;flex-wrap:wrap}.btns .apply{flex:1 1 180px}
 .apply.alt{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
 .pay{margin:4px 0 0;font-size:14px;font-weight:600}.pay.top{color:var(--hi)}.pay.none{color:var(--muted);font-weight:400}
@@ -540,6 +574,23 @@ td{border-top:1px solid var(--line);padding:6px 4px;vertical-align:top}.empty{te
     js = r"""
 const PLACES = __PLACES__;
 let mode='all', cat='all', minPay=0;
+// Saved / Applied / Hidden marks live in this browser only.
+let marks={};
+try{marks=JSON.parse(localStorage.getItem('jobMarks')||'{}')}catch(e){marks={}}
+function saveMarks(){try{localStorage.setItem('jobMarks',JSON.stringify(marks))}catch(e){}}
+function paint(c){const m=marks[c.dataset.id]||{};
+ c.querySelector('.t-save').classList.toggle('on-save',!!m.saved);
+ c.querySelector('.t-save').textContent=m.saved?'★ Saved':'☆ Save';
+ c.querySelector('.t-applied').classList.toggle('on-applied',!!m.applied);
+ c.querySelector('.t-applied').textContent=m.applied?'✓ Applied':'Applied';
+ c.querySelector('.t-hide').textContent=m.hidden?'Unhide':'✕ Not interested';
+ c.classList.toggle('is-applied',!!m.applied); c.classList.toggle('is-hidden',!!m.hidden);}
+document.querySelectorAll('.card').forEach(c=>{
+ [['t-save','saved'],['t-applied','applied'],['t-hide','hidden']].forEach(([cls,key])=>{
+  c.querySelector('.'+cls).onclick=()=>{const m=marks[c.dataset.id]||{};m[key]=!m[key];
+   if(!m.saved&&!m.applied&&!m.hidden)delete marks[c.dataset.id];else marks[c.dataset.id]=m;
+   saveMarks();paint(c);show();};});
+ paint(c);});
 const $=id=>document.getElementById(id);
 function miles(a,b,c,d){const R=3959,r=x=>x*Math.PI/180,dl=r(c-a),dn=r(d-b);
  const h=Math.sin(dl/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
@@ -552,6 +603,9 @@ function show(){
  let n=0;
  document.querySelectorAll('.card').forEach(c=>{
   const d=c.dataset; let ok=words.every(w=>d.text.includes(w)); let dist='';
+  const mk=marks[d.id]||{};
+  if(mk.hidden&&!$('showhidden').checked)ok=false;
+  if(mode==='saved')ok=ok&&!!mk.saved; if(mode==='applied')ok=ok&&!!mk.applied;
   if(mode==='new')ok=ok&&d.new==='1'; if(mode==='top')ok=ok&&+d.score>=70;
   if(cat!=='all')ok=ok&&d.cat===cat;
   if(minPay)ok=ok&&+d.pay>=minPay;
@@ -568,13 +622,13 @@ function show(){
  $('n').textContent=n;}
 $('search').onsubmit=e=>{e.preventDefault();show();return false;};
 $('clear').onclick=()=>{$('qt').value='';$('ql').value='';$('qr').value='25';$('qremote').checked=true;show();};
-['qr','qremote'].forEach(id=>$(id).onchange=show);
-document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;
- document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('on',x===b));show();});
+['qr','qremote','showhidden'].forEach(id=>$(id).onchange=show);
+document.querySelectorAll('button[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;
+ document.querySelectorAll('button[data-mode]').forEach(x=>x.classList.toggle('on',x===b));show();});
 document.querySelectorAll('button[data-pay]').forEach(b=>b.onclick=()=>{minPay=+b.dataset.pay;
  document.querySelectorAll('button[data-pay]').forEach(x=>x.classList.toggle('on',x===b));show();});
-document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{cat=b.dataset.cat;
- document.querySelectorAll('[data-cat]').forEach(x=>x.classList.toggle('on',x===b));show();});
+document.querySelectorAll('button[data-cat]').forEach(b=>b.onclick=()=>{cat=b.dataset.cat;
+ document.querySelectorAll('button[data-cat]').forEach(x=>x.classList.toggle('on',x===b));show();});
 show();
 """.replace("__PLACES__", json.dumps(places, separators=(",", ":")))
     return f"""<!DOCTYPE html>
@@ -611,10 +665,14 @@ show();
     <button data-mode="all" class="on">All</button>
     <button data-mode="new">New today</button>
     <button data-mode="top">Best matches (70%+)</button>
+    <button data-mode="saved">☆ Saved</button>
+    <button data-mode="applied">Applied</button>
+    <label class="chk"><input id="showhidden" type="checkbox"> Show hidden</label>
   </div>
   <p id="msg" class="msg"></p>
 </header>
 <main>
+{skills_html}
 {cards}
 <details><summary>Which websites worked today?</summary>
 <table><tr><td><b>Source</b></td><td><b>Jobs</b></td><td><b>Note</b></td></tr>{rows}</table>
@@ -651,7 +709,7 @@ def main():
     jobs.sort(key=lambda j: (-j["is_new"], -j["score"]))
 
     PAGE_FILE.parent.mkdir(exist_ok=True)
-    PAGE_FILE.write_text(build_page(jobs, status, {"zips": zips, "towns": towns}), encoding="utf-8")
+    PAGE_FILE.write_text(build_page(jobs, status, {"zips": zips, "towns": towns}, skills_summary(jobs, cfg) if jobs else []), encoding="utf-8")
     print(f"Done: {len(raw)} collected -> {len(jobs)} kept. Page saved to {PAGE_FILE}")
 
 
