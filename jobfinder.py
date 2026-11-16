@@ -21,7 +21,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
-from urllib.parse import urlparse
+from urllib.parse import quote_plus, urlparse
 
 import requests
 import yaml
@@ -459,6 +459,15 @@ def job_card(j):
     else:
         pay_html = '<p class="pay none">Pay not listed</p>'
     pay_val = int(j.get("pay_max") or 0)
+    if j["source"] == "Adzuna":
+        # Adzuna only gives its own page. Add a quick search for the company's own careers site.
+        q = quote_plus(f'{j["company"]} careers "{j["title"]}"')
+        apply_html = (f'<div class="btns"><a class="apply" href="https://www.google.com/search?q={q}" target="_blank" '
+                      f'rel="noopener">Find on company site →</a>'
+                      f'<a class="apply alt" href="{e(j["url"])}" target="_blank" rel="noopener">View on Adzuna</a></div>')
+    else:
+        apply_html = f'<a class="apply" href="{e(j["url"])}" target="_blank" rel="noopener">Open job &amp; apply →</a>'
+
     return f"""
 <article class="card" data-score="{j['score']}" data-new="{int(j['is_new'])}" data-text="{search_text}"
   data-loc="{e(j['location'].lower())}" data-lat="{lat}" data-lon="{lon}" data-remote="{int(bool(j.get('remote')))}"
@@ -475,7 +484,7 @@ def job_card(j):
   {f'<p class="label">You have</p><div class="chips">{chips}</div>' if chips else ''}
   {f'<p class="label">They also ask for</p><div class="chips">{gaps}</div>' if gaps else ''}
   {f'<p class="label">Qualifications</p><p class="summary">{e(j["summary"])}</p>' if j['summary'] else ''}
-  <a class="apply" href="{e(j['url'])}" target="_blank" rel="noopener">Open job &amp; apply →</a>
+  {apply_html}
 </article>"""
 
 
@@ -520,6 +529,8 @@ color:var(--ink);font-size:14px}.chk{display:flex;align-items:center;gap:6px}
 .go{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;padding:9px 18px}
 .chipsrow{margin-top:8px}.sep{width:8px}.msg{margin:6px 0 0;font-size:13px;color:var(--mid)}
 .remote{color:var(--accent);font-weight:600}
+.btns{display:flex;gap:8px;flex-wrap:wrap}.btns .apply{flex:1 1 180px}
+.apply.alt{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
 .pay{margin:4px 0 0;font-size:14px;font-weight:600}.pay.top{color:var(--hi)}.pay.none{color:var(--muted);font-weight:400}
 .chk input{flex:none;width:18px;height:18px;margin:0}#qr{flex:0 0 auto}
 @media (max-width:700px){header{position:static}}.dist{color:var(--accent)}
