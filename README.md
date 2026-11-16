@@ -13,7 +13,7 @@ Go to github.com and sign up (skip this if you already have an account).
 
 ### Step 2: Create the repository (project folder)
 1. Click **+** (top right), then **New repository**.
-2. Name: `job-finder`. Choose **Public**, because free GitHub Pages needs a public repository.
+2. Name: `job-search`. Choose **Public**, because free GitHub Pages needs a public repository.
 3. Click **Create repository**.
 4. Click **uploading an existing file**. Drag in **all** the files and folders from the zip, including the `.github` folder.
    - Tip: the `.github` folder is hidden on Mac. In Finder, press `Cmd + Shift + .` to show it.
