@@ -93,6 +93,30 @@ def make_job(source, company, title, location, url, description, days_ago):
     }
 
 
+
+def friendly_error(err):
+    """Short, safe error note for the page. Never includes web addresses (they can hold keys)."""
+    code = getattr(getattr(err, "response", None), "status_code", None)
+    if code == 401 or code == 403:
+        return f"{code}: keys or access refused. For Adzuna, use the App ID and App Key from the Adzuna dashboard (not your login)."
+    if code == 429:
+        return "429: the site said 'too many requests' and blocked us today. It will try again tomorrow."
+    if code:
+        return f"{code}: the site returned an error."
+    text = re.sub(r"https?://\S+", "[web address hidden]", str(err))
+    return text[:160]
+
+
+def get_or_post(method, url, tries=3, **kwargs):
+    """Ask a website for data. If it says 'too many requests' (429), wait and try again."""
+    for attempt in range(tries):
+        r = requests.request(method, url, timeout=30, **kwargs)
+        if r.status_code != 429 or attempt == tries - 1:
+            r.raise_for_status()
+            return r
+        time.sleep(10 * (attempt + 1))  # wait 10s, then 20s
+
+
 # ------------------------------------------------------------
 # Step 1: COLLECT jobs from each kind of website
 # ------------------------------------------------------------
@@ -105,19 +129,21 @@ def fetch_workday(emp, cfg):
     base = f"{u.scheme}://{u.netloc}"
     api = f"{base}/wday/cxs/{tenant}/{site}"
 
+    wd_headers = {**HEADERS, "Accept": "application/json", "Content-Type": "application/json",
+                  "Accept-Language": "en-US", "Origin": base, "Referer": f"{base}/{site}"}
     found = {}
     for term in cfg["search_terms"]:
         for offset in (0, 20, 40):  # up to 60 results per search word
-            r = requests.post(f"{api}/jobs", headers=HEADERS, timeout=30, json={
+            r = get_or_post("POST", f"{api}/jobs", headers=wd_headers, json={
                 "appliedFacets": {}, "limit": 20, "offset": offset, "searchText": term})
-            r.raise_for_status()
             postings = r.json().get("jobPostings", [])
             for p in postings:
                 if p.get("externalPath") and passes_title(p.get("title", ""), cfg):
                     found[p["externalPath"]] = p
             if len(postings) < 20:
                 break
-            time.sleep(1)
+            time.sleep(2)
+        time.sleep(2)
 
     jobs = []
     for path, p in found.items():
@@ -127,7 +153,7 @@ def fetch_workday(emp, cfg):
         # Open each matching job to read the full description.
         desc, location, url = "", p.get("locationsText", ""), f"{base}/{site}{path}"
         try:
-            d = requests.get(f"{api}{path}", headers=HEADERS, timeout=30).json()
+            d = get_or_post("GET", f"{api}{path}", headers=wd_headers).json()
             info = d.get("jobPostingInfo", {})
             desc = html_to_text(info.get("jobDescription", ""))
             location = info.get("location") or location
@@ -137,7 +163,7 @@ def fetch_workday(emp, cfg):
         except Exception:
             pass
         jobs.append(make_job(emp["name"], emp["name"], p.get("title"), location, url, desc, days))
-        time.sleep(1)
+        time.sleep(2)
     return jobs
 
 
@@ -175,11 +201,10 @@ def fetch_adzuna(cfg):
     jobs = []
     for term in cfg["search_terms"]:
         for page in (1, 2):
-            r = requests.get(f"https://api.adzuna.com/v1/api/jobs/us/search/{page}", headers=HEADERS, timeout=30,
+            r = get_or_post("GET", f"https://api.adzuna.com/v1/api/jobs/us/search/{page}", headers=HEADERS,
                              params={"app_id": app_id, "app_key": app_key, "what": term, "where": az["where"],
                                      "results_per_page": 50, "max_days_old": cfg["max_days_old"],
                                      "content-type": "application/json"})
-            r.raise_for_status()
             results = r.json().get("results", [])
             for j in results:
                 company = (j.get("company") or {}).get("display_name", "")
@@ -209,7 +234,7 @@ def collect_all(cfg):
             all_jobs += jobs
             status.append({"source": name, "ok": True, "count": len(jobs), "note": ""})
         except Exception as err:
-            status.append({"source": name, "ok": False, "count": 0, "note": str(err)[:160]})
+            status.append({"source": name, "ok": False, "count": 0, "note": friendly_error(err)})
         print(f"  {name}: {status[-1]}")
     return all_jobs, status
 
@@ -423,7 +448,7 @@ q.oninput=show;show();
 {cards}
 <details><summary>Which websites worked today?</summary>
 <table><tr><td><b>Source</b></td><td><b>Jobs</b></td><td><b>Note</b></td></tr>{rows}</table>
-<p>The % score counts your skills, healthcare focus, entry level, and years of experience asked.
+<p>The % score counts your skills, industries you like, entry level, and years of experience asked.
 Green chips = skills you have. Orange chips = skills the job asks for that you could learn.</p>
 </details>
 </main>
