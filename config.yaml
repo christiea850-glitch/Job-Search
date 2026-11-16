@@ -35,6 +35,15 @@ bonus_industries:
 bonus_points: 5
 
 
+# ---------- PAY ----------
+# Jobs that clearly pay LESS than min_salary are hidden.
+# Jobs that pay target_salary or more get extra points (shown first).
+# Jobs with no pay listed are still shown, marked "Pay not listed".
+min_salary: 70000
+target_salary: 100000
+hide_jobs_without_pay: false    # change to true to hide jobs with no pay listed
+
+
 # ---------- 2. WHAT JOBS I WANT ----------
 # The website search uses these words.
 search_terms:
@@ -45,6 +54,11 @@ search_terms:
   - operations analyst
   - analytics
   - project coordinator
+  - project manager
+  - program coordinator
+  - product analyst
+  - product manager
+  - product owner
 
 # A job TITLE must match at least one of these to be shown.
 # (These are "regex" patterns. "|" means OR. \b means "whole word".)
@@ -56,15 +70,19 @@ title_must_match:
   - '\breporting\b'
   - '\binformatics\b'
   - 'decision support'
-  - 'project (coordinator|analyst)'
+  - '\bproject\b|\bprogram\b|\bPMO\b|scrum master'
+  - '\bproduct (analyst|manager|owner|specialist|associate|operations)'
 
 # If the TITLE has any of these, the job is hidden (too senior or wrong field).
 title_must_not_match:
   - '\bsenior\b|\bsr\.?\b'
   - '\blead\b|\bprincipal\b|\bstaff\b'
-  - '\bdirector\b|\bmanager\b|\bhead of\b|\bVP\b|vice president'
+  - '\bdirector\b|\bhead of\b|\bVP\b|vice president'
+  # "manager" is hidden, EXCEPT project / product / program manager:
+  - '(?<!project )(?<!product )(?<!program )\bmanager\b'
   - '\barchitect\b'
   - '\bnurse\b|\bRN\b|\bLPN\b|physician|pharmacist|therapist'
+  - '\bsales\b|\bmarketing manager\b|construction|\bfacilities\b'
   - '\bactuar'
   - 'data entry|\bengineer\b|scientist'
 

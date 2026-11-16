@@ -53,6 +53,7 @@ def html_to_text(raw):
     raw = re.sub(r"(?i)<li[^>]*>", "\n• ", raw)
     raw = re.sub(r"<[^>]+>", " ", raw)
     raw = html.unescape(raw)
+    raw = re.sub(r"&?xa;|&nbsp;?", " ", raw)  # leftover space codes some sites send
     raw = re.sub(r"[ \t\xa0]+", " ", raw)
     raw = re.sub(r"\n\s*\n+", "\n", raw)
     return raw.strip()
@@ -81,8 +82,14 @@ def days_ago_from_date(value):
         return None
 
 
-def make_job(source, company, title, location, url, description, days_ago):
+def make_job(source, company, title, location, url, description, days_ago, lat=None, lon=None,
+             pay_min=None, pay_max=None, pay_estimated=False):
     return {
+        "pay_min": pay_min,
+        "pay_max": pay_max,
+        "pay_estimated": pay_estimated,
+        "lat": lat,
+        "lon": lon,
         "source": source,
         "company": (company or "").strip(),
         "title": (title or "").strip(),
@@ -212,7 +219,10 @@ def fetch_adzuna(cfg):
                     continue
                 jobs.append(make_job("Adzuna", company, j.get("title"),
                                      (j.get("location") or {}).get("display_name"), j.get("redirect_url"),
-                                     html_to_text(j.get("description")), days_ago_from_date(j.get("created"))))
+                                     html_to_text(j.get("description")), days_ago_from_date(j.get("created")),
+                                     j.get("latitude"), j.get("longitude"),
+                                     j.get("salary_min"), j.get("salary_max"),
+                                     str(j.get("salary_is_predicted")) == "1"))
             if len(results) < 50:
                 break
             time.sleep(1)
@@ -254,16 +264,52 @@ def keep_job(job, cfg):
         return False
     if job["days_ago"] is not None and job["days_ago"] > cfg["max_days_old"]:
         return False
-    remote = bool(re.search(r"\bremote\b|work (from|at) home|virtual", f"{job['location']} {job['title']}", re.I))
+    remote = bool(re.search(r"\bremote\b|work (from|at) home|virtual",
+                            f"{job['location']} {job['title']} {job['description'][:300]}", re.I))
     job["remote"] = remote
     return any_match(cfg["locations_ok"], job["location"]) or (cfg["include_remote"] and remote)
+
+
+def find_pay(text):
+    """Find pay in the job text, e.g. '$85,000 - $110,000', '$95K', '$38.50/hour'. Returns yearly (min, max)."""
+    money = r"\$\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s?([kK])?"
+    m = re.search(money + r"(?:\s*(?:-|–|to)\s*" + money + r")?(.{0,25})", text)
+    if not m:
+        return None, None
+    def num(v, k):
+        if not v:
+            return None
+        n = float(v.replace(",", ""))
+        return n * 1000 if k else n
+    low, high = num(m.group(1), m.group(2)), num(m.group(3), m.group(4))
+    high = high or low
+    if re.search(r"hour|/\s?hr|hourly", m.group(5) or "", re.I) or 15 <= high < 150:
+        low, high = low * 2080, high * 2080          # hourly -> yearly (40 hrs x 52 weeks)
+    if high < 15000:                                  # too small to be a salary (e.g. a bonus)
+        return None, None
+    return low, high
+
+
+def add_pay(job):
+    if not job.get("pay_max"):
+        job["pay_min"], job["pay_max"] = find_pay(job["description"])
+        job["pay_estimated"] = False
+
+
+def pay_ok(job, cfg):
+    if not job.get("pay_max"):
+        return not cfg.get("hide_jobs_without_pay", False)
+    return job["pay_max"] >= cfg.get("min_salary", 0)
 
 
 def dedupe(jobs):
     """The same job can show up on two sites. Keep one (prefer the employer's own site)."""
     best = {}
     for j in jobs:
-        key = re.sub(r"\W+", " ", f"{j['company'][:12]} {j['title']}".lower()).strip()
+        title = re.sub(r"\W+", " ", j["title"].lower().replace("&", " and ")).strip()
+        company = re.sub(r"\b(the|inc|llc|corp|corporation|company|co|group)\b", "", j["company"].lower())
+        company = re.sub(r"[^a-z0-9]", "", company)[:8]  # "NBC Universal" = "NBCUniversal"
+        key = f"{company} {title}"
         if key not in best or (best[key]["source"] == "Adzuna" and j["source"] != "Adzuna"):
             best[key] = j
     return list(best.values())
@@ -275,7 +321,8 @@ def dedupe(jobs):
 # Skills that job posts often ask for. Used to show "gaps" (things to learn).
 COMMON_SKILLS = ["SQL", "Python", "Excel", "Tableau", "Power BI", "R", "SAS", "Epic", "EHR", "Snowflake",
                  "statistics", "dashboards", "data cleaning", "data visualization", "machine learning",
-                 "Agile", "project management", "HIPAA", "claims", "Cerner", "Alteryx", "Looker", "ETL"]
+                 "Agile", "project management", "HIPAA", "claims", "Cerner", "Alteryx", "Looker", "ETL",
+                 "Jira", "Scrum", "Smartsheet", "MS Project", "PMP", "roadmap"]
 
 
 def skill_regex(skill):
@@ -318,12 +365,50 @@ def score_job(job, cfg):
     years = find_years_asked(job["description"])
     if years is not None:
         score += 10 if years <= cfg["max_years_experience"] else -15
+    if job.get("pay_max") and job["pay_max"] >= cfg.get("target_salary", 10**9):
+        score += 10                              # pays my target salary or more
     if job["days_ago"] is not None and job["days_ago"] <= 3:
         score += 5                               # fresh posts: apply early
 
-    job.update(score=max(0, min(score, 100)), matched=matched, gaps=gaps, years=years,
+    if re.search(r"\bproduct\b", job["title"], re.I):
+        category = "product"
+    elif re.search(r"\bproject\b|\bprogram\b|\bPMO\b|scrum", job["title"], re.I):
+        category = "project"
+    else:
+        category = "data"
+
+    job.update(category=category, score=max(0, min(score, 100)), matched=matched, gaps=gaps, years=years,
                summary=find_qualifications(job["description"]))
     return job
+
+
+# ------------------------------------------------------------
+# Step 3b: MAP POSITIONS so the page can search "within X miles of a ZIP / town"
+# ------------------------------------------------------------
+def load_places(states=("CT",)):
+    """ZIP codes and town names -> (latitude, longitude). Uses the free offline 'zipcodes' library."""
+    zips, towns = {}, {}
+    try:
+        import zipcodes
+    except ImportError:
+        return zips, towns
+    for st in states:
+        for z in zipcodes.filter_by(state=st):
+            pos = [round(float(z["lat"]), 4), round(float(z["long"]), 4)]
+            zips[z["zip_code"]] = pos
+            towns.setdefault(z["city"].lower(), pos)
+    return zips, towns
+
+
+def add_position(job, towns):
+    """If the job has no map position, find a town name in its location text."""
+    if job.get("lat") and job.get("lon"):
+        return
+    loc = job["location"].lower()
+    for town in sorted(towns, key=len, reverse=True):  # longest names first ("East Hartford" before "Hartford")
+        if re.search(r"\b" + re.escape(town) + r"\b", loc):
+            job["lat"], job["lon"] = towns[town]
+            return
 
 
 # ------------------------------------------------------------
@@ -361,15 +446,30 @@ def job_card(j):
     years = f" · Asks {j['years']}+ yrs" if j["years"] else ""
     via = ' · <span class="via">via Adzuna</span>' if j["source"] == "Adzuna" else ""
     new = '<span class="new">NEW</span>' if j["is_new"] else ""
-    search_text = e(f"{j['title']} {j['company']} {j['location']}".lower())
+    search_text = e(f"{j['title']} {j['company']}".lower())
+    lat = j.get("lat") or ""
+    lon = j.get("lon") or ""
+    remote_tag = ' · <span class="remote">Remote</span>' if j.get("remote") else ""
+    if j.get("pay_max"):
+        lo, hi = j.get("pay_min") or j["pay_max"], j["pay_max"]
+        rng = f"${lo/1000:.0f}K" if round(lo, -3) == round(hi, -3) else f"${lo/1000:.0f}K – ${hi/1000:.0f}K"
+        cls = "pay top" if hi >= 100000 else "pay"
+        est = " (estimate)" if j.get("pay_estimated") else ""
+        pay_html = f'<p class="{cls}">💵 {rng} a year{est}</p>'
+    else:
+        pay_html = '<p class="pay none">Pay not listed</p>'
+    pay_val = int(j.get("pay_max") or 0)
     return f"""
-<article class="card" data-score="{j['score']}" data-new="{int(j['is_new'])}" data-text="{search_text}">
+<article class="card" data-score="{j['score']}" data-new="{int(j['is_new'])}" data-text="{search_text}"
+  data-loc="{e(j['location'].lower())}" data-lat="{lat}" data-lon="{lon}" data-remote="{int(bool(j.get('remote')))}"
+  data-cat="{j['category']}" data-pay="{pay_val}">
   <div class="top">
     <div class="score {level}">{j['score']}<small>%</small></div>
     <div class="head">
       <h2>{new}{e(j['title'])}</h2>
-      <p class="meta">{e(j['company'])} · {e(j['location']) or 'Location not listed'}</p>
+      <p class="meta">{e(j['company'])} · {e(j['location']) or 'Location not listed'}{remote_tag}<span class="dist"></span></p>
       <p class="meta">{posted_text(j['days_ago'])}{years}{via}</p>
+      {pay_html}
     </div>
   </div>
   {f'<p class="label">You have</p><div class="chips">{chips}</div>' if chips else ''}
@@ -379,7 +479,7 @@ def job_card(j):
 </article>"""
 
 
-def build_page(jobs, status):
+def build_page(jobs, status, places):
     updated = datetime.now(ZoneInfo("America/New_York")).strftime("%a %b %d, %I:%M %p ET")
     new_count = sum(j["is_new"] for j in jobs)
     rows = "".join(
@@ -415,19 +515,57 @@ vertical-align:2px}.via{font-style:italic}
 .summary{margin:0;font-size:14.5px}
 .apply{display:block;text-align:center;margin-top:12px;padding:11px;border-radius:10px;background:var(--accent);
 color:#fff;text-decoration:none;font-weight:600}
+select,.chk{padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card);
+color:var(--ink);font-size:14px}.chk{display:flex;align-items:center;gap:6px}
+.go{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;padding:9px 18px}
+.chipsrow{margin-top:8px}.sep{width:8px}.msg{margin:6px 0 0;font-size:13px;color:var(--mid)}
+.remote{color:var(--accent);font-weight:600}
+.pay{margin:4px 0 0;font-size:14px;font-weight:600}.pay.top{color:var(--hi)}.pay.none{color:var(--muted);font-weight:400}
+.chk input{flex:none;width:18px;height:18px;margin:0}#qr{flex:0 0 auto}
+@media (max-width:700px){header{position:static}}.dist{color:var(--accent)}
 details{margin:20px 0;color:var(--muted);font-size:13.5px}table{width:100%;border-collapse:collapse}
 td{border-top:1px solid var(--line);padding:6px 4px;vertical-align:top}.empty{text-align:center;color:var(--muted)}
 """
-    js = """
-let mode='all';const q=document.getElementById('q');
-function show(){const t=q.value.toLowerCase().trim();let n=0;
-document.querySelectorAll('.card').forEach(c=>{let ok=c.dataset.text.includes(t);
-if(mode==='new')ok=ok&&c.dataset.new==='1';if(mode==='top')ok=ok&&+c.dataset.score>=70;
-c.style.display=ok?'':'none';if(ok)n++});document.getElementById('n').textContent=n;}
+    js = r"""
+const PLACES = __PLACES__;
+let mode='all', cat='all', minPay=0;
+const $=id=>document.getElementById(id);
+function miles(a,b,c,d){const R=3959,r=x=>x*Math.PI/180,dl=r(c-a),dn=r(d-b);
+ const h=Math.sin(dl/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
+function findPlace(t){t=t.trim().toLowerCase().replace(/,?\s*(ct|connecticut)$/,'').trim();
+ if(!t)return null;if(PLACES.zips[t])return PLACES.zips[t];return PLACES.towns[t]||null;}
+function show(){
+ const words=$('qt').value.toLowerCase().split(/\s+/).filter(Boolean);
+ const lt=$('ql').value.trim(), center=findPlace(lt), radius=+$('qr').value, rem=$('qremote').checked;
+ $('msg').textContent = lt && !center ? 'Could not find "'+lt+'" on the map. Showing jobs whose location contains that text.' : '';
+ let n=0;
+ document.querySelectorAll('.card').forEach(c=>{
+  const d=c.dataset; let ok=words.every(w=>d.text.includes(w)); let dist='';
+  if(mode==='new')ok=ok&&d.new==='1'; if(mode==='top')ok=ok&&+d.score>=70;
+  if(cat!=='all')ok=ok&&d.cat===cat;
+  if(minPay)ok=ok&&+d.pay>=minPay;
+  if(!rem && d.remote==='1') ok=false;
+  if(ok && lt){
+   if(center){
+    if(d.lat&&d.lon){const m=miles(center[0],center[1],+d.lat,+d.lon); dist=' · '+Math.round(m)+' mi away';
+      ok = m<=radius || (rem&&d.remote==='1');}
+    else ok = rem&&d.remote==='1';
+   } else ok = d.loc.includes(lt.toLowerCase()) || (rem&&d.remote==='1');
+  }
+  c.querySelector('.dist').textContent=dist;
+  c.style.display=ok?'':'none'; if(ok)n++;});
+ $('n').textContent=n;}
+$('search').onsubmit=e=>{e.preventDefault();show();return false;};
+$('clear').onclick=()=>{$('qt').value='';$('ql').value='';$('qr').value='25';$('qremote').checked=true;show();};
+['qr','qremote'].forEach(id=>$(id).onchange=show);
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;
-document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('on',x===b));show();});
-q.oninput=show;show();
-"""
+ document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('on',x===b));show();});
+document.querySelectorAll('button[data-pay]').forEach(b=>b.onclick=()=>{minPay=+b.dataset.pay;
+ document.querySelectorAll('button[data-pay]').forEach(x=>x.classList.toggle('on',x===b));show();});
+document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{cat=b.dataset.cat;
+ document.querySelectorAll('[data-cat]').forEach(x=>x.classList.toggle('on',x===b));show();});
+show();
+""".replace("__PLACES__", json.dumps(places, separators=(",", ":")))
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -437,18 +575,39 @@ q.oninput=show;show();
 <header>
   <h1>My Job Finder</h1>
   <p class="sub">Updated {updated} · <b id="n">{len(jobs)}</b> jobs shown · {new_count} new today</p>
-  <div class="controls">
-    <input id="q" type="search" placeholder="Search title, company, town…">
+  <form id="search" class="controls" onsubmit="return false">
+    <input id="qt" type="search" placeholder="Job title or company (e.g. project coordinator)">
+    <input id="ql" type="search" placeholder="City or ZIP (e.g. 06040)">
+    <select id="qr" aria-label="Distance">
+      <option value="10">within 10 mi</option><option value="25" selected>within 25 mi</option>
+      <option value="50">within 50 mi</option><option value="9999">any distance</option>
+    </select>
+    <label class="chk"><input id="qremote" type="checkbox" checked> Include remote</label>
+    <button id="go" type="submit" class="go">Search</button>
+    <button id="clear" type="button">Clear</button>
+  </form>
+  <div class="controls chipsrow">
+    <button data-cat="all" class="on">All types</button>
+    <button data-cat="data">Data / BI</button>
+    <button data-cat="project">Project / Program</button>
+    <button data-cat="product">Product</button>
+  </div>
+  <div class="controls chipsrow">
+    <button data-pay="0" class="on">Any pay</button>
+    <button data-pay="70000">$70K+</button>
+    <button data-pay="100000">$100K+</button>
+    <span class="sep"></span>
     <button data-mode="all" class="on">All</button>
     <button data-mode="new">New today</button>
     <button data-mode="top">Best matches (70%+)</button>
   </div>
+  <p id="msg" class="msg"></p>
 </header>
 <main>
 {cards}
 <details><summary>Which websites worked today?</summary>
 <table><tr><td><b>Source</b></td><td><b>Jobs</b></td><td><b>Note</b></td></tr>{rows}</table>
-<p>The % score counts your skills, industries you like, entry level, and years of experience asked.
+<p>The % score counts your skills, pay, industries you like, entry level, and years of experience asked.
 Green chips = skills you have. Orange chips = skills the job asks for that you could learn.</p>
 </details>
 </main>
@@ -469,13 +628,19 @@ def main():
         print("Collecting jobs…")
         raw, status = collect_all(cfg)
 
-    jobs = dedupe([j for j in raw if keep_job(j, cfg)])
+    jobs = [j for j in raw if keep_job(j, cfg)]
+    for j in jobs:
+        add_pay(j)
+    jobs = dedupe([j for j in jobs if pay_ok(j, cfg)])
     jobs = [score_job(j, cfg) for j in jobs]
+    zips, towns = load_places()
+    for j in jobs:
+        add_position(j, towns)
     mark_new(jobs)
     jobs.sort(key=lambda j: (-j["is_new"], -j["score"]))
 
     PAGE_FILE.parent.mkdir(exist_ok=True)
-    PAGE_FILE.write_text(build_page(jobs, status), encoding="utf-8")
+    PAGE_FILE.write_text(build_page(jobs, status, {"zips": zips, "towns": towns}), encoding="utf-8")
     print(f"Done: {len(raw)} collected -> {len(jobs)} kept. Page saved to {PAGE_FILE}")
 
 
